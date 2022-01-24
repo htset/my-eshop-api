@@ -6,11 +6,13 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using my_eshop_api.Helpers;
 using my_eshop_api.Models;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -42,10 +44,52 @@ namespace my_eshop_api.Controllers
                 return BadRequest(new { message = "Log in failed" });
 
             user.Token = CreateToken(user);
+            user.RefreshToken = CreateRefreshToken();
+            user.RefreshTokenExpiry = DateTime.Now.AddDays(7);
+            Context.SaveChanges();
+
             user.Password = null;
 
             return Ok(user);
         }
+
+        [HttpPost("refresh")]
+        public async Task<IActionResult> RefreshToken([FromBody] User data)
+        {
+            var user = await Context.Users.SingleOrDefaultAsync(u => (u.RefreshToken == data.RefreshToken) && (u.Token == data.Token));
+
+            if (user == null || DateTime.Now > user.RefreshTokenExpiry)
+                return BadRequest(new { message = "Invalid token" });
+
+            user.Token = CreateToken(user);
+            user.RefreshToken = CreateRefreshToken();
+            user.RefreshTokenExpiry = DateTime.Now.AddDays(7);
+            Context.SaveChanges();
+
+            user.Password = null;
+
+            return Ok(user);
+        }
+
+        [Authorize]
+        [HttpPost("revoke")]
+        public async Task<IActionResult> RevokeToken([FromBody] User data)
+        {
+            var user = await Context.Users.SingleOrDefaultAsync(u => (u.RefreshToken == data.RefreshToken));
+
+            if (user == null || DateTime.Now > user.RefreshTokenExpiry)
+                return BadRequest(new { message = "Invalid token" });
+
+            user.Token = null;
+            user.RefreshToken = null;
+            user.RefreshTokenExpiry = null;
+            Context.SaveChanges();
+
+            user.Password = null;
+
+            return Ok(user);
+        }
+
 
         [Authorize(Roles = "admin")]
         [HttpGet]
@@ -60,7 +104,10 @@ namespace my_eshop_api.Controllers
                     Username = x.Username,
                     Password = null,
                     Role = x.Role,
-                    Email = x.Email
+                    Email = x.Email,
+                    Token = null,
+                    RefreshToken = null,
+                    RefreshTokenExpiry = DateTime.Now
                 })
                 .ToListAsync();
         }
@@ -78,12 +125,23 @@ namespace my_eshop_api.Controllers
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = identity,
-                Expires = DateTime.Now.AddDays(2),
+                Expires = DateTime.Now.AddMinutes(2),
                 SigningCredentials = credentials
             };
 
             var token = jwtTokenHandler.CreateToken(tokenDescriptor);
             return jwtTokenHandler.WriteToken(token);
         }
+
+        private string CreateRefreshToken()
+        {
+            var randomNum = new byte[64];
+            using (var generator = RandomNumberGenerator.Create())
+            {
+                generator.GetBytes(randomNum);
+                return Convert.ToBase64String(randomNum);
+            }
+        }
+
     }
 }
