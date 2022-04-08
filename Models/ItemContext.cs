@@ -11,6 +11,8 @@ namespace my_eshop_api.Models
 
         public DbSet<Item> Items { get; set; }
         public DbSet<User> Users { get; set; }
+        public DbSet<Address> Addresses { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Item>().Property(p => p.Price).HasColumnType("decimal(18,2)");
