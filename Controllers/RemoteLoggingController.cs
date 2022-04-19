@@ -23,7 +23,7 @@ namespace my_eshop_api.Controllers
         [HttpPost]
         public void Post(LogMessage logMessage)
         {
-            Logger.LogError("Remote message: {message}", logMessage.Message);
+            Logger.LogError("Remote message: {message}, Stack trace: {stackTrace}", logMessage.Message, logMessage.StackTrace);
         }
     }
 }
