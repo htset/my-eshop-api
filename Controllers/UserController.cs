@@ -112,6 +112,31 @@ namespace my_eshop_api.Controllers
                 .ToListAsync();
         }
 
+        [Authorize]
+        [HttpGet]
+        public async Task<ActionResult<User>> GetUser(int id)
+        {
+            //TODO: return users without passwords????
+            return await Context.Users.FindAsync(id);
+        }
+
+        [HttpPost]
+        [AllowAnonymous]
+        public async Task<ActionResult<User>> Register([FromBody] User user)
+        {
+            if (await Context.Users.AnyAsync(u => u.Username == user.Username))
+            {
+                return BadRequest("Username already exists");
+            }
+
+            user.Role = "customer";
+            user.Password = PasswordHasher.HashPassword(user.Password);
+
+            await Context.Users.AddAsync(user);
+            await Context.SaveChangesAsync();
+            return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
+        }
+
         private string CreateToken(User user)
         {
             var jwtTokenHandler = new JwtSecurityTokenHandler();
