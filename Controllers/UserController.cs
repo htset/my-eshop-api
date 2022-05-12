@@ -6,11 +6,11 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using my_eshop_api.Helpers;
 using my_eshop_api.Models;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Net.Mail;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -18,6 +18,16 @@ using System.Threading.Tasks;
 
 namespace my_eshop_api.Controllers
 {
+    public class RegistrationCode
+    {
+        public string Code { get; set; }
+    }
+
+    public class ResetEmail
+    {
+        public string Email { get; set; }
+    }
+
     [Route("api/users")]
     [EnableCors("my_eshop_AllowSpecificOrigins")]
     [ApiController]
@@ -43,6 +53,9 @@ namespace my_eshop_api.Controllers
             if (!PasswordHasher.VerifyPassword(formParams.Password, user.Password))
                 return BadRequest(new { message = "Log in failed" });
 
+            if (user.Status != "Active")
+                return BadRequest(new { message = "Registration has not been confirmed" });
+
             user.Token = CreateToken(user);
             user.RefreshToken = CreateRefreshToken();
             user.RefreshTokenExpiry = DateTime.Now.AddDays(7);
@@ -64,7 +77,7 @@ namespace my_eshop_api.Controllers
             user.Token = CreateToken(user);
             user.RefreshToken = CreateRefreshToken();
             user.RefreshTokenExpiry = DateTime.Now.AddDays(7);
-            Context.SaveChanges();
+            await Context.SaveChangesAsync();
 
             user.Password = null;
 
@@ -83,7 +96,7 @@ namespace my_eshop_api.Controllers
             user.Token = null;
             user.RefreshToken = null;
             user.RefreshTokenExpiry = null;
-            Context.SaveChanges();
+            await Context.SaveChangesAsync();
 
             user.Password = null;
 
@@ -126,15 +139,97 @@ namespace my_eshop_api.Controllers
         {
             if (await Context.Users.AnyAsync(u => u.Username == user.Username))
             {
-                return BadRequest("Username already exists");
+                return BadRequest("Username is already used");
+            }
+
+            if (await Context.Users.AnyAsync(u => u.Email == user.Email))
+            {
+                return BadRequest("Email is already used");
             }
 
             user.Role = "customer";
             user.Password = PasswordHasher.HashPassword(user.Password);
+            user.Status = "Pending";
+            user.RegistrationCode = CreateConfirmationToken();
 
             await Context.Users.AddAsync(user);
             await Context.SaveChangesAsync();
+
+            SendConfirmationEmail(user);
+
             return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
+        }
+
+        [HttpPost("confirm_registration")]
+        [AllowAnonymous]
+        public async Task<ActionResult<User>> ConfirmRegistration([FromBody] RegistrationCode code)
+        {
+            var user = await Context.Users.SingleOrDefaultAsync(u => u.RegistrationCode == code.Code);
+            if(user == null)
+            {
+                return BadRequest("Registration code not found");
+            }
+
+            if(user.Status == "Active")
+            {
+                return BadRequest("User is already activated");
+            }
+
+            user.Status = "Active";
+            user.Token = CreateToken(user);
+            user.RefreshToken = CreateRefreshToken();
+            user.RefreshTokenExpiry = DateTime.Now.AddDays(7);
+
+            await Context.SaveChangesAsync();
+
+            user.Password = null;
+
+            return Ok(user);
+        }
+
+        [HttpPost("reset_password")]
+        [AllowAnonymous]
+        public async Task<ActionResult<User>> ResetPassword([FromBody] ResetEmail resetEmail)
+        {
+            var user = await Context.Users.SingleOrDefaultAsync(u => u.Email == resetEmail.Email);
+            if (user == null)
+            {
+                return BadRequest("Email not found");
+            }
+
+            user.Status = "PasswordReset";
+            user.Password = null;
+            user.RegistrationCode = CreateConfirmationToken();
+
+            await Context.SaveChangesAsync();
+
+            SendPasswordResetEmail(user);
+
+            return Ok(user);
+        }
+
+        [HttpPost("change_password")]
+        [AllowAnonymous]
+        public async Task<ActionResult<User>> ChangePassword([FromBody] User inputUser)
+        {
+            var user = await Context.Users.SingleOrDefaultAsync(u => u.RegistrationCode == inputUser.RegistrationCode);
+
+            if(user == null)
+            {
+                return BadRequest("User not found");
+            }
+
+            user.Password = PasswordHasher.HashPassword(inputUser.Password);
+            user.Status = "Active";
+            user.Token = CreateToken(user);
+            user.RefreshToken = CreateRefreshToken();
+            user.RefreshTokenExpiry = DateTime.Now.AddDays(7);
+
+            await Context.SaveChangesAsync();
+
+            user.Password = null;
+
+            return Ok(user);
         }
 
         private string CreateToken(User user)
@@ -168,5 +263,61 @@ namespace my_eshop_api.Controllers
             }
         }
 
+        private string CreateConfirmationToken()
+        {
+            var randomNum = new byte[64];
+            using (var generator = RandomNumberGenerator.Create())
+            {
+                generator.GetBytes(randomNum);
+                var tempString = Convert.ToBase64String(randomNum);
+                return tempString.Replace("\\", "").Replace("+", "").Replace("=", "").Replace("/", "");
+            }
+        }
+
+        private void SendConfirmationEmail(User user)
+        {
+            var smtpClient = new SmtpClient()
+            {
+                Host = AppSettings.SmtpHost,
+                Port = AppSettings.SmtpPort,
+                Credentials = new System.Net.NetworkCredential(AppSettings.SmtpUsername, AppSettings.SmtpPassword),
+                EnableSsl = true
+            };
+
+            var message = new MailMessage()
+            {
+                From = new MailAddress("info@my-eshop.com"),
+                Subject = "Confirm Registration",
+                Body = "To confirm registration please click <a href=\"https://localhost:4200/confirm_registration?code=" + user.RegistrationCode + "\">here</a>",
+                IsBodyHtml = true
+            };
+
+            message.To.Add(user.Email);
+
+            //smtpClient.Send(message);
+        }
+
+        private void SendPasswordResetEmail(User user)
+        {
+            var smtpClient = new SmtpClient()
+            {
+                Host = AppSettings.SmtpHost,
+                Port = AppSettings.SmtpPort,
+                Credentials = new System.Net.NetworkCredential(AppSettings.SmtpUsername, AppSettings.SmtpPassword),
+                EnableSsl = true
+            };
+
+            var message = new MailMessage()
+            {
+                From = new MailAddress("info@my-eshop.com"),
+                Subject = "Email reset",
+                Body = "To insert a new password, please click <a href=\"https://localhost:4200/new_password?code=" + user.RegistrationCode + "\">here</a>",
+                IsBodyHtml = true
+            };
+
+            message.To.Add(user.Email);
+
+            //smtpClient.Send(message);
+        }
     }
 }

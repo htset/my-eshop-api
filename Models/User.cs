@@ -14,5 +14,8 @@ namespace my_eshop_api.Models
         public DateTime? RefreshTokenExpiry { get; set; }
         public string Role { get; set; }
         public string Email { get; set; }
+        public string Status { get; set; }
+        public string RegistrationCode { get; set; }
+
     }
 }
