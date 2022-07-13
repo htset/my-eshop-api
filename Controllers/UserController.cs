@@ -126,7 +126,7 @@ namespace my_eshop_api.Controllers
         }
 
         [Authorize]
-        [HttpGet]
+        [HttpGet("{id}")]
         public async Task<ActionResult<User>> GetUser(int id)
         {
             //TODO: return users without passwords????

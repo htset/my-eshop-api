@@ -83,7 +83,7 @@ namespace my_eshop_api
             }
 
             app.UseHttpsRedirection();
-
+            app.UseStaticFiles();
             app.UseRouting();
 
             //must be placed between UseRouting and UseEndpoints

@@ -23,7 +23,9 @@ namespace my_eshop_api.Controllers
         [HttpGet]
         public async Task<ActionResult<ItemPayload>> GetItems([FromQuery] QueryStringParameters qsParameters)
         {
-            IQueryable<Item> returnItems = _context.Items.OrderBy(on => on.Id);
+            IQueryable<Item> returnItems = _context.Items
+                .Include(it => it.Images)
+                .OrderBy(on => on.Id);
 
             if (qsParameters.Name != null && !qsParameters.Name.Trim().Equals(string.Empty))
                 returnItems = returnItems.Where(item => item.Name.ToLower().Contains(qsParameters.Name.Trim().ToLower()));
@@ -48,11 +50,53 @@ namespace my_eshop_api.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<Item>> GetItem(int id)
         {
-            var Item = await _context.Items.FindAsync(id);
-            if (Item == null)
+            var item = await _context.Items
+                .Include(it => it.Images)
+                .SingleOrDefaultAsync(item => item.Id == id);
+            
+            if (item == null)
                 return NotFound();
 
-            return Item;
+            return Ok(item);
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<Item>> PostItem(Item item)
+        {
+            await _context.Items.AddAsync(item);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetItem), new { id = item.Id }, item);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutItem(int id, Item item)
+        {
+            if (id != item.Id)
+            {
+                return BadRequest();
+            }
+
+            _context.Entry(item).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteItem(int id)
+        {
+            var item = await _context.Items.FindAsync(id);
+
+            if (item == null)
+            {
+                return NotFound();
+            }
+
+            _context.Items.Remove(item);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
         }
     }
 }

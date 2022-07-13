@@ -3,15 +3,17 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using my_eshop_api.Models;
 
 namespace my_eshop_api.Migrations
 {
     [DbContext(typeof(ItemContext))]
-    partial class ItemContextModelSnapshot : ModelSnapshot
+    [Migration("20220513095007_Image")]
+    partial class Image
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -75,8 +77,6 @@ namespace my_eshop_api.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ItemId");
 
                     b.ToTable("Images");
                 });
@@ -228,15 +228,6 @@ namespace my_eshop_api.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("my_eshop_api.Models.Image", b =>
-                {
-                    b.HasOne("my_eshop_api.Models.Item", null)
-                        .WithMany("Images")
-                        .HasForeignKey("ItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("my_eshop_api.Models.OrderDetail", b =>
                 {
                     b.HasOne("my_eshop_api.Models.Order", null)
@@ -244,11 +235,6 @@ namespace my_eshop_api.Migrations
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("my_eshop_api.Models.Item", b =>
-                {
-                    b.Navigation("Images");
                 });
 
             modelBuilder.Entity("my_eshop_api.Models.Order", b =>
